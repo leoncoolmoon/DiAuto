@@ -1,0 +1,61 @@
+name: Build github-flavor APK (API16+)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: '17'
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ env.JAVA_VERSION }}
+
+    - name: Install Android SDK/NDK/CMake
+      uses: r0adkll/setup-android@v2
+      with:
+        api-levels: '34'                  # compileSdk/targetSdk uses 34+
+        build-tools: '34.0.0'
+        components: >-
+          platform-tools,
+          cmdline-tools;latest,
+          cmake;3.22.1,
+          ndk;21.4.7075529
+        # note: adjust versions if build fails; these are commonly usable defaults
+
+    - name: Cache Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}-${{ hashFiles('**/*.gradle*','**/*.gradle.kts') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+
+    - name: Grant execute for gradlew
+      run: chmod +x ./gradlew
+
+    - name: Build github flavor (release)
+      # For faster feedback during testing use assembleGithubDebug instead
+      run: ./gradlew :app:assembleGithubRelease --no-daemon -Pandroid.useAndroidX=true
+      # If you don't need a release-signed APK, assembleGithubDebug is fine:
+      # run: ./gradlew :app:assembleGithubDebug --no-daemon
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DiAuto-github-apk
+        path: |
+          app/build/outputs/**/*.apk
