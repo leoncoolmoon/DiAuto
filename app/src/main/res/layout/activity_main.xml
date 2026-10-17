@@ -195,7 +195,7 @@
             <ImageView
                 android:layout_width="160dp"
                 android:layout_height="160dp"
-                android:src="@drawable/ic_android_auto" />
+                app:srcCompat="@drawable/ic_android_auto" />
 
             <TextView
                 android:layout_width="wrap_content"
