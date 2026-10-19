@@ -440,10 +440,30 @@ class WifiDirectManager(private val context: Context) : WifiP2pManager.Connectio
             sessionOwnership.observeCreatedGroup(true, group.networkName)
             if (!sessionOwnership.owns(true, group.networkName)) {
                 if (group.networkName.isNullOrBlank()) {
-                    AppLog.w("WifiDirectManager: Zombie P2P group detected in onGroupInfoAvailable (networkName is null or blank). Removing zombie group.")
+                    val appSettings = com.andrerinas.openheadunit.App.provide(context).settings
+                    AppLog.w("WifiDirectManager: Zombie P2P group detected in onGroupInfoAvailable (networkName is null or blank). Removing zombie group and scheduling recreation.")
                     manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
-                        override fun onSuccess() { AppLog.i("WifiDirectManager: Zombie group removal success in onGroupInfoAvailable") }
-                        override fun onFailure(reason: Int) { AppLog.w("WifiDirectManager: Zombie group removal failed in onGroupInfoAvailable: $reason") }
+                        override fun onSuccess() {
+                            AppLog.i("WifiDirectManager: Zombie group removal succeeded in onGroupInfoAvailable. Triggering group recreation...")
+                            postSessionDelayed({
+                                if (isNativeAaMode()) {
+                                    startNativeAaQuietHost()
+                                } else if (appSettings.wifiConnectionMode == 2) {
+                                    makeVisible()
+                                }
+                            }, 1000L)
+                        }
+                        override fun onFailure(reason: Int) {
+                            val reasonStr = getP2pErrorString(reason)
+                            AppLog.e("WifiDirectManager: Zombie group removal failed in onGroupInfoAvailable ($reasonStr). Retrying group recreation in 2s...")
+                            postSessionDelayed({
+                                if (isNativeAaMode()) {
+                                    startNativeAaQuietHost()
+                                } else if (appSettings.wifiConnectionMode == 2) {
+                                    makeVisible()
+                                }
+                            }, 2000L)
+                        }
                     })
                     return
                 }
@@ -1701,8 +1721,15 @@ class WifiDirectManager(private val context: Context) : WifiP2pManager.Connectio
             } else if (group.networkName.isNullOrBlank()) {
                 AppLog.w("WifiDirectManager: Zombie P2P group detected in removeOwnedGroup (networkName is null or blank). Removing zombie group.")
                 mgr.removeGroup(ch, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() { if (gen == generation) listener.onSuccess() }
-                    override fun onFailure(reason: Int) { if (gen == generation) listener.onFailure(reason) }
+                    override fun onSuccess() {
+                        AppLog.i("WifiDirectManager: Zombie group removal succeeded in removeOwnedGroup.")
+                        if (gen == generation) listener.onSuccess()
+                    }
+                    override fun onFailure(reason: Int) {
+                        val reasonStr = getP2pErrorString(reason)
+                        AppLog.e("WifiDirectManager: Zombie group removal failed in removeOwnedGroup ($reasonStr). Proceeding with retry continuation.")
+                        if (gen == generation) listener.onFailure(reason)
+                    }
                 })
             } else {
                 // Do not call a retry continuation: it would immediately contend with the owner.
