@@ -56,4 +56,14 @@ class P2pSessionOwnershipTest {
         state.observeCreatedGroup(true, "DIRECT-system")
         assertTrue(state.owns(true, "DIRECT-system"))
     }
+
+    @Test fun `zombie group with null or blank name is not owned`() {
+        val state = P2pSessionOwnership()
+        state.start()
+        state.expectSystemName()
+        state.created(state.generation)
+        assertFalse(state.owns(true, null))
+        assertFalse(state.owns(true, ""))
+        assertFalse(state.owns(true, "   "))
+    }
 }
