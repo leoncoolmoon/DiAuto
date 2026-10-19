@@ -378,7 +378,7 @@ class WifiDirectManager(private val context: Context) : WifiP2pManager.Connectio
                 addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
                 addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
             }
-            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
             isReceiverRegistered = true
             AppLog.d("WifiDirectManager: BroadcastReceiver registered.")
         } catch (e: Exception) {
@@ -439,6 +439,14 @@ class WifiDirectManager(private val context: Context) : WifiP2pManager.Connectio
         if (group != null && group.isGroupOwner) {
             sessionOwnership.observeCreatedGroup(true, group.networkName)
             if (!sessionOwnership.owns(true, group.networkName)) {
+                if (group.networkName.isNullOrBlank()) {
+                    AppLog.w("WifiDirectManager: Zombie P2P group detected in onGroupInfoAvailable (networkName is null or blank). Removing zombie group.")
+                    manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() { AppLog.i("WifiDirectManager: Zombie group removal success in onGroupInfoAvailable") }
+                        override fun onFailure(reason: Int) { AppLog.w("WifiDirectManager: Zombie group removal failed in onGroupInfoAvailable: $reason") }
+                    })
+                    return
+                }
                 foreignGroupDetected()
                 return
             }
@@ -1686,6 +1694,12 @@ class WifiDirectManager(private val context: Context) : WifiP2pManager.Connectio
             if (group == null) {
                 listener.onSuccess()
             } else if (sessionOwnership.owns(group.isGroupOwner, group.networkName)) {
+                mgr.removeGroup(ch, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() { if (gen == generation) listener.onSuccess() }
+                    override fun onFailure(reason: Int) { if (gen == generation) listener.onFailure(reason) }
+                })
+            } else if (group.networkName.isNullOrBlank()) {
+                AppLog.w("WifiDirectManager: Zombie P2P group detected in removeOwnedGroup (networkName is null or blank). Removing zombie group.")
                 mgr.removeGroup(ch, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() { if (gen == generation) listener.onSuccess() }
                     override fun onFailure(reason: Int) { if (gen == generation) listener.onFailure(reason) }
